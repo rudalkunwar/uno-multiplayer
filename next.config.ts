@@ -1,13 +1,7 @@
-// next.config.js
+import type { NextConfig } from "next";
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,  // Enables React Strict Mode
-  pageExtensions: ['tsx', 'ts'],  // Ensures that Next.js will handle TypeScript pages
-  webpack(config: any, { isServer }: { isServer: boolean }) {
-    // You can add custom webpack configurations here
-    return config;
-  },
+const nextConfig: NextConfig = {
+  /* config options here */
 };
 
-module.exports = nextConfig;
+export default nextConfig;

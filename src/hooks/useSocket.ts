@@ -1,67 +1,71 @@
-import { useEffect, useRef } from 'react'
-import { io, Socket } from 'socket.io-client'
-import { useGame } from '../context/GameContext'
+import { useEffect, useRef, useState, useCallback } from 'react';
+import io, { Socket } from 'socket.io-client';
+import { env } from '@/config/env';
 
 export const useSocket = () => {
-  const socket = useRef<Socket | null>(null)
-  const { dispatch } = useGame()
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Initialize socket connection
-    socket.current = io('http://localhost:3000')
+    const initSocket = async () => {
+      try {
+        await fetch(`${env.server.apiBaseUrl}/socket`);
+        
+        socketRef.current = io(env.server.socketUrl, {
+          reconnectionDelayMax: 10000,
+        });
 
-    // Connection events
-    socket.current.on('connect', () => {
-      dispatch({ type: 'SET_CONNECTION', payload: true })
-    })
+        socketRef.current.on('connect', () => {
+          console.log('Socket connected');
+          setIsConnected(true);
+          setError(null);
+        });
 
-    socket.current.on('disconnect', () => {
-      dispatch({ type: 'SET_CONNECTION', payload: false })
-    })
+        socketRef.current.on('disconnect', () => {
+          console.log('Socket disconnected');
+          setIsConnected(false);
+        });
 
-    // Game events
-    socket.current.on('roomJoined', ({ roomCode }) => {
-      dispatch({ type: 'JOIN_ROOM', payload: roomCode })
-    })
+        socketRef.current.on('roomFull', ({ roomId }) => {
+          setError(`Room ${roomId} is full (max ${env.game.maxPlayersPerRoom} players)`);
+        });
 
-    socket.current.on('gameStateUpdate', (gameState) => {
-      dispatch({ type: 'UPDATE_GAME_STATE', payload: gameState })
-    })
+        socketRef.current.on('gameReady', ({ playersCount }) => {
+          console.log(`Game ready with ${playersCount} players`);
+        });
+      } catch (err) {
+        setError('Failed to connect to server');
+        console.error('Socket connection error:', err);
+      }
+    };
 
-    socket.current.on('gameOver', ({ winner }) => {
-      dispatch({ type: 'GAME_OVER', payload: { winner } })
-    })
+    initSocket();
 
     return () => {
-      socket.current?.disconnect()
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  const joinGame = useCallback((roomId: string) => {
+    if (socketRef.current) {
+      socketRef.current.emit('joinGame', roomId);
     }
-  }, [dispatch])
+  }, []);
 
-  const joinLobby = (playerName: string) => {
-    socket.current?.emit('joinLobby', playerName)
-  }
-
-  const createRoom = (roomDetails: { name: string, settings: any }) => {
-    socket.current?.emit('createRoom', roomDetails)
-  }
-
-  const joinRoom = (roomCode: string) => {
-    socket.current?.emit('joinRoom', roomCode)
-  }
-
-  const playCard = (gameId: string, cardIndex: number) => {
-    socket.current?.emit('playCard', { gameId, cardIndex })
-  }
-
-  const drawCard = (gameId: string) => {
-    socket.current?.emit('drawCard', gameId)
-  }
+  const playCard = useCallback((roomId: string, card: any) => {
+    if (socketRef.current) {
+      socketRef.current.emit('playCard', { roomId, card });
+    }
+  }, []);
 
   return {
-    joinLobby,
-    createRoom,
-    joinRoom,
+    socket: socketRef.current,
+    isConnected,
+    error,
+    joinGame,
     playCard,
-    drawCard,
-  }
-}
+  };
+};
