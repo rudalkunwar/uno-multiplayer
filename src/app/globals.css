@@ -1,21 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Bangers&display=swap');
+
 @tailwind base;
-@tailwind components;
 @tailwind utilities;
+@tailwind components;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+.font-game {
+  font-family: 'Bangers', system-ui;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Add smooth scrolling */
+html {
+  scroll-behavior: smooth;
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom animation for cards */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }

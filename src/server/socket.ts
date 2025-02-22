@@ -2,7 +2,7 @@ import { Server as NetServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { Socket } from 'socket.io';
 import { env } from '@/config/env';
-import { GameService } from '@/services/gameService';
+import { GameService } from '@/services/GameService';
 import { GameState, Player } from '@/types/game';
 
 export class SocketServer {
