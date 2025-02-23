@@ -31,5 +31,37 @@ export interface GameState {
   isGameStarted: boolean;
   lastCard: Card | null;
   winner: string | null;
-  currentColor: CardColor; // for wild cards
+  currentColor: CardColor | null; // for wild cards
+}
+export interface GameState {
+  roomId: string;
+  roomName: string;
+  host: string;
+  players: Player[];
+  settings: GameSettings;
+  currentPlayerIndex: number;
+  deck: Card[];
+  discardPile: Card[];
+  direction: 1 | -1;
+  isGameStarted: boolean;
+  lastCard: Card | null;
+  winner: string | null;
+  currentColor: CardColor | null;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+export interface Player {
+  id: string;
+  username: string;
+  hand: Card[];
+  isHost: boolean;
+  isConnected: boolean;
+}
+
+export interface GameSettings {
+  roomName: string;
+  maxPlayers: number;
+  timePerTurn: number;
+  isPrivate: boolean;
 }

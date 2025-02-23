@@ -43,19 +43,23 @@ export default function CreateGamePage() {
   });
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateRoom = async () => {
-    if (!username || isCreating) return;
-    setIsCreating(true);
-    try {
-      const newRoomData = generateUniqueRoomCode();
-      createGame(username);
-      setRoomData(newRoomData);
-    } catch (error) {
-      console.error('Failed to create room:', error);
-    } finally {
-      setIsCreating(false);
-    }
-  };
+// Update the handleCreateRoom function in your CreateGamePage
+const handleCreateRoom = async () => {
+  if (!username || isCreating) return;
+  setIsCreating(true);
+  
+  try {
+    const newRoomData = generateUniqueRoomCode();
+    createGame(username, settings); // Pass the settings to createGame
+    setRoomData(newRoomData);
+    
+    // Navigation will be handled by the socket event listener
+  } catch (error) {
+    console.error('Failed to create room:', error);
+  } finally {
+    setIsCreating(false);
+  }
+};
 
   const generateUniqueRoomCode = () => {
     const code = RoomCodeGenerator.generateRoomCode(username);
