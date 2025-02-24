@@ -42,25 +42,9 @@ export default function CreateGamePage() {
     isPrivate: false,
   });
   const [isCreating, setIsCreating] = useState(false);
+  const [isCodeGenerated, setIsCodeGenerated] = useState(false);
 
-// Update the handleCreateRoom function in your CreateGamePage
-const handleCreateRoom = async () => {
-  if (!username || isCreating) return;
-  setIsCreating(true);
-  
-  try {
-    const newRoomData = generateUniqueRoomCode();
-    createGame(username, settings); // Pass the settings to createGame
-    setRoomData(newRoomData);
-    
-    // Navigation will be handled by the socket event listener
-  } catch (error) {
-    console.error('Failed to create room:', error);
-  } finally {
-    setIsCreating(false);
-  }
-};
-
+  // Generate a unique room code
   const generateUniqueRoomCode = () => {
     const code = RoomCodeGenerator.generateRoomCode(username);
     const now = new Date();
@@ -70,6 +54,46 @@ const handleCreateRoom = async () => {
       createdAt: now.toISOString(),
       expiresAt: expires.toISOString()
     };
+  };
+
+  // Step 1: Generate the room code
+  const handleGenerateCode = () => {
+    if (!username) return;
+    const newRoomData = generateUniqueRoomCode();
+    setRoomData(newRoomData);
+    setIsCodeGenerated(true);
+  };
+
+  // Step 2: Create the actual room with the generated code
+  const handleCreateRoom = async () => {
+    if (!roomData || !username || isCreating) return;
+
+    setIsCreating(true);
+    try {
+      // Create a payload that matches the expected CreateGamePayload structure
+      const payload = {
+        username: username,
+        settings: {
+          ...settings,
+          roomCode: roomData.code
+        }
+      };
+
+      // Add error handling toast or notification component
+      try {
+        await createGame(payload);
+        // Navigation will be handled by the socket event listener
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create game';
+        // Show error to user (implement your preferred UI notification method)
+        console.error('Create game error:', errorMessage);
+
+        // Optional: Show a retry button
+        // setShowRetryButton(true);
+      }
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const FormField = ({ label, icon: Icon, children }: { label: string; icon: any; children: React.ReactNode }) => (
@@ -201,6 +225,7 @@ const handleCreateRoom = async () => {
                   className="w-full px-4 py-3 rounded-lg border bg-white focus:ring-2 
                            focus:ring-blue-500 focus:border-blue-500 transition-shadow"
                   placeholder="Enter room name"
+                  disabled={isCodeGenerated}
                 />
               </FormField>
 
@@ -210,6 +235,7 @@ const handleCreateRoom = async () => {
                   onChange={(e) => setSettings({ ...settings, maxPlayers: Number(e.target.value) })}
                   className="w-full px-4 py-3 rounded-lg border bg-white focus:ring-2 
                            focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                  disabled={isCodeGenerated}
                 >
                   {[2, 3, 4, 6].map(num => (
                     <option key={num} value={num}>{num} Players</option>
@@ -223,6 +249,7 @@ const handleCreateRoom = async () => {
                   onChange={(e) => setSettings({ ...settings, timePerTurn: Number(e.target.value) })}
                   className="w-full px-4 py-3 rounded-lg border bg-white focus:ring-2 
                            focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                  disabled={isCodeGenerated}
                 >
                   {[15, 30, 45, 60].map(sec => (
                     <option key={sec} value={sec}>{sec} seconds</option>
@@ -237,6 +264,7 @@ const handleCreateRoom = async () => {
                   checked={settings.isPrivate}
                   onChange={(e) => setSettings({ ...settings, isPrivate: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  disabled={isCodeGenerated}
                 />
                 <label htmlFor="isPrivate" className="text-sm font-medium text-gray-700 flex items-center gap-2">
                   <Settings size={18} />
@@ -247,23 +275,36 @@ const handleCreateRoom = async () => {
 
             {roomData && <RoomCodeDisplay />}
 
-            <button
-              onClick={handleCreateRoom}
-              disabled={!isConnected || isCreating || !settings.roomName.trim()}
-              className="w-full bg-blue-600 text-white py-4 rounded-xl font-medium
-                       hover:bg-blue-700 transition-all disabled:bg-gray-400
-                       disabled:cursor-not-allowed flex items-center justify-center 
-                       gap-2 shadow-lg hover:shadow-xl disabled:shadow-none"
-            >
-              {isCreating ? (
-                <>
-                  <Loader2 className="animate-spin" size={20} />
-                  Creating Room...
-                </>
-              ) : (
-                'Create Room'
-              )}
-            </button>
+            {!isCodeGenerated ? (
+              <button
+                onClick={handleGenerateCode}
+                disabled={!isConnected || !settings.roomName.trim()}
+                className="w-full bg-blue-600 text-white py-4 rounded-xl font-medium
+                         hover:bg-blue-700 transition-all disabled:bg-gray-400
+                         disabled:cursor-not-allowed flex items-center justify-center 
+                         gap-2 shadow-lg hover:shadow-xl disabled:shadow-none"
+              >
+                Generate Room Code
+              </button>
+            ) : (
+              <button
+                onClick={handleCreateRoom}
+                disabled={!isConnected || isCreating}
+                className="w-full bg-green-600 text-white py-4 rounded-xl font-medium
+                         hover:bg-green-700 transition-all disabled:bg-gray-400
+                         disabled:cursor-not-allowed flex items-center justify-center 
+                         gap-2 shadow-lg hover:shadow-xl disabled:shadow-none"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} />
+                    Creating Room...
+                  </>
+                ) : (
+                  'Create Room'
+                )}
+              </button>
+            )}
           </div>
         </motion.div>
 

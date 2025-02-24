@@ -10,6 +10,7 @@ export const env = {
       maxPlayersPerRoom: parseInt(process.env.MAX_PLAYERS_PER_ROOM || '4', 10),
       minPlayersToStart: parseInt(process.env.MIN_PLAYERS_TO_START || '2', 10),
       initialCardsPerPlayer: parseInt(process.env.INITIAL_CARDS_PER_PLAYER || '7', 10),
+      defaultTimePerTurn: 30,
     },
     websocket: {
       pingInterval: parseInt(process.env.WS_PING_INTERVAL || '25000', 10),

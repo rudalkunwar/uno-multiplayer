@@ -21,7 +21,7 @@ interface GameEvents {
 
 interface CreateGamePayload {
   username: string;
-  settings: GameSettings;
+  settings: GameSettings & { roomCode?: string };
 }
 
 interface CreateGameResponse {
@@ -40,45 +40,71 @@ interface PlayCardPayload {
   cardId: string;
   chosenColor?: string;
 }
-
 export const useSocket = (events?: GameEvents) => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+  const pendingCallbacks = useRef(new Map());
 
   const initSocket = useCallback(async () => {
+    if (socketRef.current?.connected) {
+      setIsInitializing(false);
+      return;
+    }
+
     try {
-      // Check server availability
-      const response = await fetch(`${env.server.apiBaseUrl}/socket`);
-      if (!response.ok) {
-        throw new Error('Server is not available');
+      // Clean up existing socket if any
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
       }
 
-      // Initialize socket connection
       socketRef.current = io(env.server.socketUrl, {
         reconnectionDelayMax: 10000,
         reconnectionAttempts: maxReconnectAttempts,
-        timeout: 10000,
-        transports: ['websocket', 'polling'],
+        timeout: 15000, // Increased timeout
+        transports: ['websocket'],
+        forceNew: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
       });
 
-      // Connection events
+      // Add connect_timeout event
+      socketRef.current.on('connect_timeout', () => {
+        console.error('Socket connection timeout');
+        setError('Connection timeout - please try again');
+        setIsInitializing(false);
+      });
+
       socketRef.current.on('connect', () => {
         console.log(`Socket connected at ${new Date().toISOString()}`);
         setIsConnected(true);
         setError(null);
+        setIsInitializing(false);
         reconnectAttempts.current = 0;
       });
 
       socketRef.current.on('disconnect', (reason) => {
         console.log(`Socket disconnected at ${new Date().toISOString()}, reason: ${reason}`);
         setIsConnected(false);
+        
+        // Clear all pending callbacks on disconnect
+        pendingCallbacks.current.forEach((callback) => {
+          callback(new Error('Socket disconnected'));
+        });
+        pendingCallbacks.current.clear();
+
+        if (reason === 'io server disconnect') {
+          socketRef.current?.connect();
+        }
       });
 
       socketRef.current.on('connect_error', (err) => {
         console.error(`Connection error at ${new Date().toISOString()}:`, err);
+        setIsInitializing(false);
         reconnectAttempts.current++;
         if (reconnectAttempts.current >= maxReconnectAttempts) {
           setError('Failed to connect to server after multiple attempts');
@@ -86,73 +112,38 @@ export const useSocket = (events?: GameEvents) => {
         }
       });
 
-      // Game events
+      // Add acknowledgment event handler
+      socketRef.current.on('ack', ({ id, error, data }) => {
+        const callback = pendingCallbacks.current.get(id);
+        if (callback) {
+          pendingCallbacks.current.delete(id);
+          if (error) {
+            callback(new Error(error));
+          } else {
+            callback(null, data);
+          }
+        }
+      });
+
       if (events) {
-        if (events.onGameCreated) {
-          socketRef.current.on('gameCreated', (data: CreateGameResponse) => {
-            console.log('Game created:', {
-              roomCode: data.roomCode,
-              settings: data.settings,
-              playerCount: data.gameState.players.length,
-            });
-            events.onGameCreated?.(data);
-          });
-        }
-
-        if (events.onGameStateUpdated) {
-          socketRef.current.on('gameStateUpdated', (gameState: GameState) => {
-            console.log('Game state updated:', gameState);
-            events.onGameStateUpdated?.(gameState);
-          });
-        }
-
-        if (events.onPlayerJoined) {
-          socketRef.current.on('playerJoined', (data: { gameState: GameState; newPlayer: Player }) => {
-            console.log('Player joined:', data);
-            events.onPlayerJoined?.(data);
-          });
-        }
-
-        if (events.onGameReady) {
-          socketRef.current.on('gameReady', (data: { playersCount: number }) => {
-            console.log('Game ready:', data);
-            events.onGameReady?.(data);
-          });
-        }
-
-        if (events.onGameStarted) {
-          socketRef.current.on('gameStarted', (data: { gameState: GameState }) => {
-            console.log('Game started:', data);
-            events.onGameStarted?.(data);
-          });
-        }
-
-        if (events.onGameEnded) {
-          socketRef.current.on('gameEnded', (data: { winner: Player; gameState: GameState }) => {
-            console.log('Game ended:', data);
-            events.onGameEnded?.(data);
-          });
-        }
-
-        if (events.onError) {
-          socketRef.current.on('error', (error: { message: string; code?: string }) => {
-            console.error('Game error:', error);
-            events.onError?.(error);
-            setError(error.message);
-          });
-        }
+        Object.entries(events).forEach(([event, handler]) => {
+          if (handler && socketRef.current) {
+            socketRef.current.on(event, handler);
+          }
+        });
       }
     } catch (err) {
       console.error('Socket initialization error:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect to server');
+      setIsInitializing(false);
     }
   }, [events]);
 
   useEffect(() => {
     initSocket();
     return () => {
+      pendingCallbacks.current.clear();
       if (socketRef.current) {
-        console.log('Cleaning up socket connection');
         socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
         socketRef.current = null;
@@ -163,7 +154,7 @@ export const useSocket = (events?: GameEvents) => {
   const emitWithTimeout = useCallback(async <T>(
     eventName: string,
     data: any,
-    timeout: number = 5000
+    timeout: number = 15000 // Increased default timeout
   ): Promise<T> => {
     return new Promise((resolve, reject) => {
       if (!socketRef.current?.connected) {
@@ -171,53 +162,85 @@ export const useSocket = (events?: GameEvents) => {
         return;
       }
 
+      const callbackId = Date.now().toString();
       const timer = setTimeout(() => {
-        reject(new Error(`${eventName} event timed out`));
+        pendingCallbacks.current.delete(callbackId);
+        reject(new Error(`${eventName} event timed out. Please check your connection and try again.`));
       }, timeout);
 
-      socketRef.current.emit(eventName, data, (response: T) => {
+      pendingCallbacks.current.set(callbackId, (error: Error | null, response?: T) => {
         clearTimeout(timer);
-        resolve(response);
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response as T);
+        }
       });
+
+      try {
+        socketRef.current.emit(eventName, { ...data, callbackId });
+      } catch (err) {
+        clearTimeout(timer);
+        pendingCallbacks.current.delete(callbackId);
+        reject(err);
+      }
     });
   }, []);
 
-  const createGame = useCallback(async (payload: CreateGamePayload) => {
+  const createGame = useCallback(async (payload: CreateGamePayload): Promise<CreateGameResponse> => {
     try {
-      // Validate settings before sending
-      if (!payload.settings.roomName?.trim()) {
-        throw new Error('Room name is required');
-      }
-      if (
-        !payload.settings.maxPlayers ||
-        payload.settings.maxPlayers < env.game.minPlayersToStart ||
-        payload.settings.maxPlayers > env.game.maxPlayersPerRoom
-      ) {
-        throw new Error(
-          `Players must be between ${env.game.minPlayersToStart} and ${env.game.maxPlayersPerRoom}`
-        );
+      if (!socketRef.current?.connected) {
+        throw new Error('Socket is not connected. Please try again.');
       }
 
-      // Add timestamp to the payload
-      const timestampedPayload = {
-        ...payload,
-        timestamp: new Date().toISOString(),
+      // Validate settings
+      const validationError = validateGameSettings(payload.settings);
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
+      // Add retry mechanism
+      let retries = 0;
+      const maxRetries = 2;
+      
+      const attemptCreate = async (): Promise<CreateGameResponse> => {
+        try {
+          const timestampedPayload = {
+            ...payload,
+            timestamp: new Date().toISOString(),
+          };
+
+          console.log(`Attempting to create game (attempt ${retries + 1}/${maxRetries + 1}):`, timestampedPayload);
+
+          return await emitWithTimeout<CreateGameResponse>(
+            'createGame', 
+            timestampedPayload,
+            20000 // Increased timeout for game creation
+          );
+        } catch (error) {
+          if (retries < maxRetries && error instanceof Error && error.message.includes('timed out')) {
+            retries++;
+            console.log(`Retrying create game (${retries}/${maxRetries})`);
+            return attemptCreate();
+          }
+          throw error;
+        }
       };
 
-      console.log('Creating game with settings:', timestampedPayload);
-
-      const response = await emitWithTimeout<CreateGameResponse>('createGame', timestampedPayload);
-      
+      const response = await attemptCreate();
       console.log('Game created successfully:', response);
       return response;
     } catch (err) {
       console.error('Create game error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create game');
-      throw err;
+      const errorMessage = err instanceof Error 
+        ? `Failed to create game: ${err.message}`
+        : 'Failed to create game';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
   }, [emitWithTimeout]);
 
-  const joinGame = useCallback(async (payload: JoinGamePayload) => {
+    const joinGame = useCallback(async (payload: JoinGamePayload) => {
     try {
       await emitWithTimeout('joinGame', payload);
     } catch (err) {
@@ -257,22 +280,18 @@ export const useSocket = (events?: GameEvents) => {
     }
   }, [emitWithTimeout]);
 
-  // Helper function to check if socket is ready
-  const isReady = useCallback(() => {
-    return socketRef.current?.connected ?? false;
-  }, []);
-
   return {
     socket: socketRef.current,
     isConnected,
     error,
+    isInitializing,
     createGame,
     joinGame,
     startGame,
     playCard,
     drawCard,
     reconnectAttempts: reconnectAttempts.current,
-    isReady,
+    isReady: useCallback(() => socketRef.current?.connected ?? false, []),
   };
 };
 
