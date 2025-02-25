@@ -2,212 +2,169 @@
 
 import { useState, useEffect } from 'react';
 import { useSocket } from '@/hooks/useSocket';
-import { GameState, GameSettings, CardColor } from '@/types/game';
+import { ConnectionStatus } from '@/app/ConnectionStatus';
 
 /**
- * @component SocketTester
- * @description Test component for verifying socket functionality
- * @author rudalkunwar
- * @created 2025-02-25 06:10:41 UTC
+ * @component LoadingSpinner
+ * @description Simple loading spinner component
  */
-export default function SocketTester() {
-    const [logs, setLogs] = useState<string[]>([]);
-    const [roomCode, setRoomCode] = useState<string>('');
-    const [gameState, setGameState] = useState<GameState | null>(null);
+const LoadingSpinner = () => (
+    <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-t-transparent border-white"></div>
+);
 
-    // Initialize socket with event handlers
+/**
+ * @component SocketTestPage
+ * @description Socket testing page with loading states and animations
+ * @author rudalkunwar
+ * @created 2025-02-25 07:44:13
+ */
+export default function SocketTestPage() {
+    const [roomInput, setRoomInput] = useState('');
+    const [username, setUsername] = useState('');
+    const [logs, setLogs] = useState<string[]>([]);
+    const [lastRoomCode, setLastRoomCode] = useState<string>('');
+    const [isClient, setIsClient] = useState(false); // Prevents SSR mismatch
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
+    // Loading states
+    const [isCreating, setIsCreating] = useState(false);
+    const [isJoining, setIsJoining] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    // Socket hook
     const {
         isConnected,
         error,
-        isInitializing,
+        socket,
         createGame,
         joinGame,
         playCard,
         drawCard
     } = useSocket({
         onGameStateUpdated: (state) => {
-            addLog('Game state updated');
-            setGameState(state);
-        },
-        onGameCreated: (data) => {
-            addLog(`Game created with room code: ${data.roomCode}`);
-            setRoomCode(data.roomCode);
+            addLog('🔄 Game State Updated', state);
         },
         onPlayerJoined: (data) => {
-            addLog(`Player joined: ${data.newPlayer.username}`);
+            addLog('👤 Player Joined', data);
         },
         onGameStarted: (data) => {
-            addLog('Game started!');
+            addLog('🎮 Game Started', data);
         },
         onGameEnded: (data) => {
-            addLog(`Game ended! Winner: ${data.winner.username}`);
+            addLog('🏁 Game Ended', data);
         },
         onError: (error) => {
-            addLog(`Error: ${error.message}`);
+            addLog('❌ Socket Error', error);
         }
     });
 
-    const addLog = (message: string) => {
-        setLogs(prev => [`[${new Date().toISOString()}] ${message}`, ...prev]);
-    };
+    // Enhanced logging helper with timestamp
+    const addLog = (type: string, data?: any) => {
+        const now = new Date();
+        const timestamp = now.toISOString();
+        let logMessage = type;
 
-    // Test game settings
-    const testSettings: GameSettings = {
-        roomName: 'Test Room',
-        maxPlayers: 4,
-        minPlayers: 2,
-        timePerTurn: 30,
-        isPrivate: false,
-        scoreLimit: 500,
-        stackDrawCards: true,
-        forcePlay: false,
-        jumpIn: false,
-        drawUntilMatch: false,
-        allowChallenges: true,
-        strictUno: true,
-        sevenZero: false,
-        noBluffing: false,
-        passAfterDraw: true,
-        drawCardLimit: 3
-    };
-
-    // Test functions
-    const handleCreateGame = async () => {
-        try {
-            const response = await createGame({
-                username: 'TestPlayer1',
-                settings: testSettings
-            });
-            addLog(`Created game with room code: ${response.roomCode}`);
-        } catch (err) {
-            addLog(`Error creating game: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        }
-    };
-
-    const handleJoinGame = async () => {
-        if (!roomCode) {
-            addLog('No room code available');
-            return;
-        }
-        try {
-            await joinGame({
-                roomCode,
-                username: `TestPlayer${Math.floor(Math.random() * 1000)}`
-            });
-            addLog('Joined game successfully');
-        } catch (err) {
-            addLog(`Error joining game: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        }
-    };
-
-    const handlePlayCard = async () => {
-        if (!roomCode || !gameState) {
-            addLog('No active game');
-            return;
-        }
-        try {
-            // Get first card from current player's hand
-            const currentPlayer = gameState.players.find(p => p.isCurrentTurn);
-            if (!currentPlayer || currentPlayer.cards.length === 0) {
-                addLog('No cards available to play');
-                return;
+        if (data) {
+            if (data instanceof Error) {
+                logMessage += `: ${data.message}`;
+            } else if (typeof data === 'object') {
+                logMessage += `: ${JSON.stringify(data, null, 2)}`;
+            } else {
+                logMessage += `: ${data}`;
             }
-
-            const card = currentPlayer.cards[0];
-            await playCard({
-                roomCode,
-                cardId: card.id,
-                chosenColor: card.type === 'wild' || card.type === 'wild4' ? 'red' as CardColor : undefined
-            });
-            addLog(`Played card: ${card.type} ${card.color}`);
-        } catch (err) {
-            addLog(`Error playing card: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
+
+        setLogs(prev => [`[${timestamp}] ${logMessage}`, ...prev]);
     };
 
-    const handleDrawCard = async () => {
-        if (!roomCode) {
-            addLog('No room code available');
-            return;
-        }
-        try {
-            await drawCard(roomCode);
-            addLog('Drew a card');
-        } catch (err) {
-            addLog(`Error drawing card: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        }
-    };
+    if (!isClient) return null; // Prevents hydration error
 
     return (
-        <div className="p-4">
-            <h1 className="text-2xl font-bold mb-4">Socket Tester</h1>
+        <div className="p-6 max-w-4xl mx-auto">
+            <h1 className="text-3xl font-bold mb-6 flex items-center gap-2">
+                WebSocket Test Page
+                {!isConnected && (
+                    <div className="inline-block animate-pulse text-yellow-500 text-sm font-normal">
+                        Connecting...
+                    </div>
+                )}
+            </h1>
 
             {/* Connection Status */}
-            <div className="mb-4">
-                <p>Status: {isInitializing ? 'Initializing...' : isConnected ? 'Connected' : 'Disconnected'}</p>
-                {error && <p className="text-red-500">Error: {error}</p>}
-            </div>
+            <ConnectionStatus isConnected={isConnected} error={error} socket={socket} />
 
-            {/* Game Controls */}
-            <div className="space-y-2 mb-4">
-                <button
-                    onClick={handleCreateGame}
-                    disabled={!isConnected}
-                    className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-                >
-                    Create Game
-                </button>
+            {/* Controls */}
+            <div className="mb-6 space-y-4 p-4 rounded border bg-white shadow-sm">
+                <h2 className="text-xl font-semibold mb-2">Test Controls</h2>
 
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={roomCode}
-                        onChange={(e) => setRoomCode(e.target.value)}
-                        placeholder="Room Code"
-                        className="px-2 py-1 border rounded"
-                    />
+                <div className="space-y-4">
+                    <div className="form-group">
+                        <label className="block text-sm font-medium mb-1">Username</label>
+                        <input
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            placeholder="Enter username"
+                            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label className="block text-sm font-medium mb-1">Room Code</label>
+                        <input
+                            type="text"
+                            value={roomInput}
+                            onChange={(e) => setRoomInput(e.target.value)}
+                            placeholder="Room Code"
+                            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                     <button
-                        onClick={handleJoinGame}
-                        disabled={!isConnected || !roomCode}
-                        className="px-4 py-2 bg-green-500 text-white rounded disabled:opacity-50"
+                        onClick={() => { }}
+                        disabled={!isConnected || isCreating}
+                        className={`p-2 bg-blue-500 text-white rounded transition-all
+              ${!isConnected || isCreating ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}
+              flex items-center justify-center gap-2`}
                     >
-                        Join Game
+                        {isCreating ? <LoadingSpinner /> : null}
+                        {isCreating ? 'Creating...' : 'Create Game'}
+                    </button>
+
+                    <button
+                        onClick={() => { }}
+                        disabled={!isConnected || !roomInput || isJoining}
+                        className={`p-2 bg-green-500 text-white rounded transition-all
+              ${!isConnected || !roomInput || isJoining ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600'}
+              flex items-center justify-center gap-2`}
+                    >
+                        {isJoining ? <LoadingSpinner /> : null}
+                        {isJoining ? 'Joining...' : 'Join Game'}
                     </button>
                 </div>
-
-                <button
-                    onClick={handlePlayCard}
-                    disabled={!isConnected || !roomCode || !gameState}
-                    className="px-4 py-2 bg-yellow-500 text-white rounded disabled:opacity-50"
-                >
-                    Play Card
-                </button>
-
-                <button
-                    onClick={handleDrawCard}
-                    disabled={!isConnected || !roomCode || !gameState}
-                    className="px-4 py-2 bg-purple-500 text-white rounded disabled:opacity-50"
-                >
-                    Draw Card
-                </button>
             </div>
 
-            {/* Game State */}
-            {gameState && (
-                <div className="mb-4">
-                    <h2 className="text-xl font-bold">Game State</h2>
-                    <pre className="bg-gray-100 p-2 rounded mt-2 overflow-auto max-h-60">
-                        {JSON.stringify(gameState, null, 2)}
-                    </pre>
-                </div>
-            )}
-
             {/* Logs */}
-            <div>
-                <h2 className="text-xl font-bold mb-2">Logs</h2>
-                <div className="bg-black text-green-400 p-4 rounded font-mono h-60 overflow-auto">
+            <div className="p-4 rounded border bg-white shadow-sm">
+                <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                    Event Logs
+                    <span className="text-xs text-gray-500">{new Date().toLocaleString()}</span>
+                </h2>
+                <div className="bg-gray-900 text-green-400 p-4 rounded font-mono h-96 overflow-auto">
                     {logs.map((log, index) => (
-                        <div key={index} className="whitespace-pre-wrap">
+                        <div
+                            key={index}
+                            className={`whitespace-pre-wrap mb-1 ${log.includes('❌') ? 'text-red-400' :
+                                log.includes('✅') ? 'text-green-400' :
+                                    'text-blue-400'
+                                } ${index === 0 ? 'animate-fade-in' : ''}`}
+                        >
                             {log}
                         </div>
                     ))}
