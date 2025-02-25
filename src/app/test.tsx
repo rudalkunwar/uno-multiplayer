@@ -6,34 +6,57 @@ import { ConnectionStatus } from '@/app/ConnectionStatus';
 
 /**
  * @component LoadingSpinner
- * @description Simple loading spinner component
  */
 const LoadingSpinner = () => (
     <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-t-transparent border-white"></div>
 );
 
 /**
+ * @component TimeDisplay
+ */
+const TimeDisplay = () => {
+    const [time, setTime] = useState('');
+
+    useEffect(() => {
+        const updateTime = () => {
+            const now = new Date();
+            // Format: YYYY-MM-DD HH:MM:SS
+            const formatted = now.toISOString()
+                .replace('T', ' ')
+                .split('.')[0];
+            setTime(formatted);
+        };
+
+        updateTime();
+        const interval = setInterval(updateTime, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return <span className="text-xs text-gray-500">{time}</span>;
+};
+
+/**
  * @component SocketTestPage
  * @description Socket testing page with loading states and animations
  * @author rudalkunwar
- * @created 2025-02-25 07:44:13
+ * @created 2025-02-25 08:11:22
  */
 export default function SocketTestPage() {
     const [roomInput, setRoomInput] = useState('');
-    const [username, setUsername] = useState('');
+    const [username, setUsername] = useState('rudalkunwar'); // Default username
     const [logs, setLogs] = useState<string[]>([]);
     const [lastRoomCode, setLastRoomCode] = useState<string>('');
-    const [isClient, setIsClient] = useState(false); // Prevents SSR mismatch
-
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
+    const [isClient, setIsClient] = useState(false);
 
     // Loading states
     const [isCreating, setIsCreating] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isDrawing, setIsDrawing] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
 
     // Socket hook
     const {
@@ -62,10 +85,14 @@ export default function SocketTestPage() {
         }
     });
 
-    // Enhanced logging helper with timestamp
+    console.log(socket);
+
+    // Enhanced logging helper with proper timestamp
     const addLog = (type: string, data?: any) => {
         const now = new Date();
-        const timestamp = now.toISOString();
+        const timestamp = now.toISOString()
+            .replace('T', ' ')
+            .split('.')[0];
         let logMessage = type;
 
         if (data) {
@@ -81,7 +108,63 @@ export default function SocketTestPage() {
         setLogs(prev => [`[${timestamp}] ${logMessage}`, ...prev]);
     };
 
-    if (!isClient) return null; // Prevents hydration error
+    // Handlers
+    const handleCreateGame = async () => {
+        if (!isConnected || !username) return;
+
+        setIsCreating(true);
+        try {
+            addLog('🎮 Creating game...');
+            const response = await createGame({
+                username,
+                settings: {
+                    roomName: `${username}'s Room`,
+                    maxPlayers: 4,
+                    minPlayers: 2,
+                    timePerTurn: 30,
+                    isPrivate: false,
+                    scoreLimit: 500,
+                    stackDrawCards: true,
+                    forcePlay: false,
+                    jumpIn: false,
+                    drawUntilMatch: false,
+                    allowChallenges: true,
+                    strictUno: true,
+                    sevenZero: false,
+                    noBluffing: false,
+                    passAfterDraw: true,
+                    drawCardLimit: 3
+                }
+            });
+            addLog('✅ Game Created', response);
+            setLastRoomCode(response.roomCode);
+            setRoomInput(response.roomCode);
+        } catch (err) {
+            addLog('❌ Create Game Error', err);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const handleJoinGame = async () => {
+        if (!isConnected || !roomInput || !username) return;
+
+        setIsJoining(true);
+        try {
+            addLog('🎮 Joining game...');
+            await joinGame({
+                roomCode: roomInput,
+                username
+            });
+            addLog('✅ Joined game successfully');
+        } catch (err) {
+            addLog('❌ Join Game Error', err);
+        } finally {
+            setIsJoining(false);
+        }
+    };
+
+    if (!isClient) return null;
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
@@ -94,10 +177,8 @@ export default function SocketTestPage() {
                 )}
             </h1>
 
-            {/* Connection Status */}
             <ConnectionStatus isConnected={isConnected} error={error} socket={socket} />
 
-            {/* Controls */}
             <div className="mb-6 space-y-4 p-4 rounded border bg-white shadow-sm">
                 <h2 className="text-xl font-semibold mb-2">Test Controls</h2>
 
@@ -127,22 +208,22 @@ export default function SocketTestPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                     <button
-                        onClick={() => { }}
-                        disabled={!isConnected || isCreating}
+                        onClick={handleCreateGame}
+                        disabled={!isConnected || isCreating || !username}
                         className={`p-2 bg-blue-500 text-white rounded transition-all
-              ${!isConnected || isCreating ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}
-              flex items-center justify-center gap-2`}
+                            ${!isConnected || isCreating || !username ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}
+                            flex items-center justify-center gap-2`}
                     >
                         {isCreating ? <LoadingSpinner /> : null}
                         {isCreating ? 'Creating...' : 'Create Game'}
                     </button>
 
                     <button
-                        onClick={() => { }}
-                        disabled={!isConnected || !roomInput || isJoining}
+                        onClick={handleJoinGame}
+                        disabled={!isConnected || !roomInput || isJoining || !username}
                         className={`p-2 bg-green-500 text-white rounded transition-all
-              ${!isConnected || !roomInput || isJoining ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600'}
-              flex items-center justify-center gap-2`}
+                            ${!isConnected || !roomInput || isJoining || !username ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600'}
+                            flex items-center justify-center gap-2`}
                     >
                         {isJoining ? <LoadingSpinner /> : null}
                         {isJoining ? 'Joining...' : 'Join Game'}
@@ -150,19 +231,18 @@ export default function SocketTestPage() {
                 </div>
             </div>
 
-            {/* Logs */}
             <div className="p-4 rounded border bg-white shadow-sm">
                 <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
                     Event Logs
-                    <span className="text-xs text-gray-500">{new Date().toLocaleString()}</span>
+                    <TimeDisplay />
                 </h2>
                 <div className="bg-gray-900 text-green-400 p-4 rounded font-mono h-96 overflow-auto">
                     {logs.map((log, index) => (
                         <div
                             key={index}
                             className={`whitespace-pre-wrap mb-1 ${log.includes('❌') ? 'text-red-400' :
-                                log.includes('✅') ? 'text-green-400' :
-                                    'text-blue-400'
+                                    log.includes('✅') ? 'text-green-400' :
+                                        'text-blue-400'
                                 } ${index === 0 ? 'animate-fade-in' : ''}`}
                         >
                             {log}
