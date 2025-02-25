@@ -1,23 +1,14 @@
-import { NextApiRequest } from 'next';
-import { Server as NetServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
-import { NextApiResponseWithSocket } from '@/types/socket';
-import { SocketServer } from '@/server/socket';
+import { NextResponse } from 'next/server';
+import { setupSocketServer } from '@/server/socket.server';
+import { createServer } from 'http';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+const server = createServer();
+const io = setupSocketServer(server);
 
-const SocketHandler = (req: NextApiRequest, res: NextApiResponseWithSocket) => {
-  if (!res.socket.server.io) {
-    const httpServer: NetServer = res.socket.server as any;
-    res.socket.server.io = new SocketServer(httpServer);
-    console.log('Socket server initialized');
-  }
+server.listen(parseInt(process.env.SOCKET_PORT || '3000'), () => {
+  console.log(`Socket server running on port ${process.env.SOCKET_PORT || 3000}`);
+});
 
-  res.end();
-};
-
-export default SocketHandler;
+export async function GET() {
+  return NextResponse.json({ status: 'Socket server is running' });
+}

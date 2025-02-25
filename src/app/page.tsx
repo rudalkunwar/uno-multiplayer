@@ -5,7 +5,7 @@ import LandingPage from './Landing'
 function Home() {
   return (
     <div>
-      <LandingPage />
+      <Test />
     </div>
   )
 }
