@@ -1,17 +1,12 @@
-export type CardColor = 'red' | 'blue' | 'green' | 'yellow' | 'wild';
-export type CardType = 
-  | 'number' 
-  | 'skip' 
-  | 'reverse' 
-  | 'drawTwo' 
-  | 'wild' 
-  | 'wildDrawFour';
+export type CardColor = 'red' | 'blue' | 'green' | 'yellow' | 'black';
+export type CardType = 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4';
 
 export interface Card {
   id: string;
   color: CardColor;
   type: CardType;
-  value?: number; // for number cards
+  value?: number;
+  isWild?: boolean;
 }
 
 export interface Player {
@@ -22,41 +17,39 @@ export interface Player {
 }
 
 export interface GameState {
-  roomId: string;
+  roomCode: string;
   players: Player[];
   currentPlayerIndex: number;
-  deck: Card[];
-  discardPile: Card[];
-  direction: 1 | -1; // 1 for clockwise, -1 for counter-clockwise
-  isGameStarted: boolean;
-  lastCard: Card | null;
-  winner: string | null;
-  currentColor: CardColor | null; // for wild cards
-}
-export interface GameState {
-  roomId: string;
-  roomName: string;
-  host: string;
-  players: Player[];
-  settings: GameSettings;
-  currentPlayerIndex: number;
-  deck: Card[];
-  discardPile: Card[];
   direction: 1 | -1;
-  isGameStarted: boolean;
-  lastCard: Card | null;
-  winner: string | null;
-  currentColor: CardColor | null;
-  createdAt: Date;
-  expiresAt: Date;
+  deck: Card[];
+  discardPile: Card[];
+  currentColor: CardColor;
+  lastPlayedCard?: Card;
+  gameStatus: 'waiting' | 'playing' | 'finished';
+  winner?: Player;
+  settings: GameSettings;
+  turnStartTime: number;
+  turnTimeLeft: number;
+  lastAction?: {
+    type: string;
+    player: string;
+    card?: Card;
+    timestamp: number;
+  };
 }
 
 export interface Player {
   id: string;
   username: string;
-  hand: Card[];
+  cards: Card[];
   isHost: boolean;
+  isCurrentTurn: boolean;
   isConnected: boolean;
+  score: number;
+  lastAction?: {
+    type: 'play' | 'draw' | 'skip';
+    timestamp: number;
+  };
 }
 
 export interface GameSettings {
@@ -65,3 +58,9 @@ export interface GameSettings {
   timePerTurn: number;
   isPrivate: boolean;
 }
+
+
+
+
+
+
