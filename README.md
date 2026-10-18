@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Uno Multiplayer
 
-## Getting Started
+Real-time multiplayer UNO. Players create or join a room and play against each other in the browser over WebSockets.
 
-First, run the development server:
+Built on Next.js 15 with a custom Socket.IO server, bundled into the same deployment rather than split into a separate service.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## What it does
+
+- Create a room, share the code, join with up to four players
+- Full UNO rules: draw, play, skip, reverse, wild, wild draw-four
+- Colour and value wild-card selection
+- Winner announcement and rematch
+- Draw detection and automatic reshuffle on discard pile exhaustion
+
+## Stack
+
+| | |
+|---|---|
+| Framework | Next.js 15, React 19 |
+| Language | TypeScript |
+| Realtime | Socket.IO 4 |
+| Animation | Motion 12 |
+| Styling | Tailwind CSS 3 |
+
+## Architecture
+
+The Socket.IO server lives in `server.ts` and compiles alongside the Next.js app through `tsconfig.server.json`. Both ship in one deployment:
+
+```
+src/          React components, game state, UI
+server.ts     Socket.IO server: room creation, turn order, rule enforcement
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Rule enforcement lives on the server, not the client. Clients render what the server tells them, which keeps the game consistent between players and stops a modified client from cheating its way through a turn.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Running locally
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+git clone https://github.com/rudalkunwar/uno-multiplayer.git
+cd uno-multiplayer
+npm install
+npm run dev
+```
 
-## Learn More
+Open `http://localhost:3000`, create a room, and share the code.
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Command | Does |
+|---|---|
+| `npm run dev` | Next.js and the socket server, with hot reload |
+| `npm run build` | Next.js production build plus server TypeScript compile |
+| `npm start` | Runs the compiled `dist/server.js` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
